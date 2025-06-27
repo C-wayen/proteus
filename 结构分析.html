@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>温度报警系统结构分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0A2239; 
+            color: #F2F2F2; 
+        }
+        .card {
+            background-color: #0D2E4E; 
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* shadow-md */
+            padding: 1.5rem; /* p-6 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            border: 1px solid #45A9BF; 
+        }
+        .highlight-text {
+            color: #F2B705; 
+        }
+        .accent-text {
+            color: #45A9BF; 
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        /* Flowchart styling */
+        .flow-step {
+            background-color: #0D2E4E; 
+            border: 2px solid #45A9BF; 
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+        .flow-arrow-down {
+            width: 2px;
+            height: 20px;
+            background-color: #45A9BF; 
+            margin: 0 auto;
+            position: relative;
+        }
+        .flow-arrow-down::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid #45A9BF; 
+        }
+        .flow-decision {
+            background-color: #0D2E4E; 
+            border: 2px solid #45A9BF; 
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            position: relative;
+            transform: rotate(45deg);
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: auto;
+            margin-right: auto;
+            cursor: pointer; /* Make it clear it's clickable */
+            transition: all 0.3s ease-in-out; /* Smooth transition for scale/size */
+            overflow: hidden; /* Hide overflowing content initially */
+        }
+        .flow-decision.active {
+            width: 250px; /* Make it bigger */
+            height: 250px; /* Make it bigger */
+            padding: 1.5rem; /* Increase padding for expanded view */
+            z-index: 10; /* Bring to front when active */
+            background-color: #0A2239; /* Darker background when expanded */
+        }
+        .flow-decision span {
+            display: block;
+            transform: rotate(-45deg); /* Counter-rotate the main label */
+            position: absolute; /* Position the main label */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg); /* Center and un-rotate */
+            transition: opacity 0.3s ease-in-out;
+        }
+        .flow-decision.active span {
+            opacity: 0; /* Hide the main label when expanded */
+        }
+
+        .flow-connector {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: -0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .flow-path {
+            width: 2px;
+            height: 30px;
+            background-color: #45A9BF; 
+            position: relative;
+            margin-top: 0;
+        }
+        .flow-path.left { margin-left: 25%; }
+        .flow-path.right { margin-right: 25%; }
+        .flow-path::after {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 8px solid #45A9BF; 
+        }
+        .flow-path-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%) rotate(-45deg);
+            white-space: nowrap;
+            font-size: 0.75rem;
+            color: #F2F2F2; 
+        }
+        .flow-path-label.left { left: calc(25% - 50px); } /* Adjust based on actual text length */
+        .flow-path-label.right { right: calc(25% - 50px); } /* Adjust based on actual text length */
+        .flow-path-h {
+            width: 100%;
+            height: 2px;
+            background-color: #45A9BF; 
+            margin-top: 0;
+        }
+        .flow-end {
+            background-color: #0D2E4E; 
+            border: 2px solid #45A9BF; 
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            font-weight: bold;
+            color: #F2B705; 
+        }
+        .module-detail {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        .module-detail.active {
+            max-height: 930px; /* Adjust as needed */
+            transition: max-height 0.5s ease-in, opacity 0.5s ease-in;
+        }
+        /* Specific styling for the detail content inside the rotated diamond */
+        #flow-interrupt-check-detail {
+            position: absolute; /* Relative to its parent .flow-decision */
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            display: flex;
+            flex-direction: column; /* Allow content to stack */
+            align-items: center;
+            justify-content: center;
+            opacity: 0; /* Hidden by default */
+            pointer-events: none; /* Not clickable when hidden */
+            transform: rotate(-45deg); /* Counter-rotate for readability */
+            transition: opacity 0.3s ease-in-out;
+            background-color: transparent; /* Background will be from parent .flow-decision */
+            color: #F2F2F2; /* Ensure text is visible */
+            padding: 1.5rem; /* Padding for text inside expanded diamond */
+            box-sizing: border-box; /* Include padding in width/height */
+            text-align: center;
+            font-size: 0.875rem; /* Adjust font size for better fit */
+            line-height: 1.2; /* Adjust line height */
+        }
+        #flow-interrupt-check-detail.active {
+            opacity: 1; /* Show when active */
+            pointer-events: auto; /* Make clickable when active */
+            max-height: none; /* Override default module-detail max-height */
+        }
+        .code-snippet {
+            background-color: #0A2239; /* 从整体介绍.html调整 (body bg) */
+            color: #F2F2F2; /* 从整体介绍.html调整 (body text) */
+            padding: 0.75rem;
+            border-radius: 0.375rem; /* rounded-md */
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.25;
+            margin-top: 0.75rem;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold mb-2 highlight-text">基于51单片机温度报警系统</h1>
+            <h2 class="text-2xl md:text-3xl font-light accent-text">代码逻辑解析信息图</h2>
+            <p class="max-w-3xl mx-auto text-gray-300 mt-4">
+                本信息图旨在通过交互式可视化，深入剖析51单片机温度报警系统的软件架构、关键子程序功能及其核心执行流程，以提升对系统代码逻辑的理解。
+            </p>
+        </header>
+
+        <section id="module-overview" class="mb-16 card">
+            <h2 class="text-3xl font-bold text-center mb-8 highlight-text">模块概览：系统软件架构</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-300 mb-8">
+                本温度报警系统的软件设计被模块化，以确保代码的清晰性、可维护性和可扩展性。以下图表展示了主要功能模块及其相对复杂程度的概览。
+            </p>
+            <div class="chart-container">
+                <canvas id="moduleChart"></canvas>
+            </div>
+        </section>
+
+        <section id="key-subprograms" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-8 highlight-text">关键子程序功能解析</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-300 mb-8">
+                系统的核心功能由一系列精心设计的子程序实现。点击卡片可查看每个子程序的详细功能描述及相关代码片段。
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('dswd-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">DSWD：温度数据读取</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="dswd-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>此子程序负责通过单总线协议，从DS18B20温度传感器获取原始温度数据，包括低字节和高字节。它是温度采集流程的起点。</p>
+                        <pre class="code-snippet"><code>
+DSWD:	
+    LCALL RSTSNR	;调用复位程序
+    JNB F0,KEND	;没应答就结束程序
+    MOV R0,#0CCH	;只有一只拓展，跳过程序存储器匹配命令
+    LCALL SEND_BYTE	;发送0CCH
+    MOV R0,#44H	;温度转换命令
+    LCALL SEND_BYTE	
+    SETB EA
+    CLR EA
+    LCALL RSTSNR
+    JNB F0,KEND
+    MOV R0,#0CCH	;跳过匹配命令
+    LCALL SEND_BYTE
+    MOV R0,#0BEH	;读温度命令
+    LCALL SEND_BYTE
+    LCALL READ_BYTE	;读低位温度
+    MOV WDLSB,A
+    LCALL READ_BYTE	;读高位
+    MOV WDMSB,A
+KEND:
+    SETB EA
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('trans12-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">TRANS12：温度数据转换</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="trans12-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>该子程序对DS18B20采集的原始温度数据进行格式转换，将其解析为带有小数点后一位的十进制温度值，并分离出整数和小数部分，以适配数码管的显示需求。</p>
+                        <pre class="code-snippet"><code>
+TRANS12:
+    LCALL WRITE
+    LCALL DELAY7MS
+    MOV READ_ADD,WRIT_ADD
+    LCALL READ_IN
+    INC WRIT_ADD
+    INC WRIT_ADD
+TRAN_CHE:	
+    MOV A,30H
+    MOV 44H,30H
+    ANL 44H,#0FH    ;剩下小数部分
+    ANL A,#0F0H		;舍去小数部分
+    MOV 3AH,A		; 保存低4位（小数部分）
+    MOV A,31H
+    ANL A,#0FH		;舍去符号部分
+    ORL A,3AH		;合并温度数据
+    SWAP A
+; 分离整数部分
+TRAN_INT:
+    MOV 41H,A
+    
+    MOV B,#10
+    DIV AB
+    MOV 43H,B		;对10取余得到个位
+    MOV 42H,A
+    MOV B,#10
+    DIV AB
+    MOV 42H,B		;再取余得到十位
+    
+    
+; 转换为段码
+    MOV DPTR,#TAB		;十位段码
+    MOV A,42H
+    MOVC A,@A+DPTR
+    MOV 48H,A       
+    MOV DPTR,#TAB		;个位段码
+    MOV A,43H
+    MOVC A,@A+DPTR    
+    CLR ACC.7         	;点亮小数点(P0.7)
+    MOV 49H,A 
+    MOV DPTR,#TAB1		;小数位段码
+    MOV A,44H	
+    MOVC A,@A+DPTR
+    MOV 4AH,A       
+    MOV A,41H
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('alarm-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">ALARM：报警控制</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="alarm-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>负责依据当前温度与系统预设的温度上限 T_HIGHEST 及下限 T_LOWEST 进行比较。若温度超出此范围，则控制蜂鸣器启动报警。</p>
+                        <pre class="code-snippet"><code>
+ALARM:
+    MOV A,41H
+    CLR C
+    SUBB A,T_HIGHEST
+    JNC ALARM_1 ;高于上限，报警
+    
+    MOV A,41H
+    CLR C
+    SUBB A,T_LOWEST
+    JC ALARM_1 ;低于下线，报警
+    
+    CJNE A,T_HIGHEST,NEXT_C
+    JMP ALARM_1 ;等于上限，报警
+NEXT_C:
+    CJNE A,T_LOWEST,NO_ALARM
+    ;等于下限，报警
+    ; 温度超限处理   
+ALARM_1:      
+    CLR ALARM_BEE  ; 打开蜂鸣器
+    SJMP ALARM_END   
+NO_ALARM:
+    SETB ALARM_BEE    ; 关闭蜂鸣器
+ALARM_END:
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('eeprom-write-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">WRITE (EEPROM)：数据写入</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="eeprom-write-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>该子程序将温度数据的低字节和高字节写入至AT24C02 EEPROM芯片的指定存储地址，实现历史数据的持久化。</p>
+                        <pre class="code-snippet"><code>
+WRITE:	  
+    LCALL START ;S
+    MOV A,#0A0H ;发送设备地址+写操作
+    LCALL SEND
+    LCALL ACKI
+    JC WRITEEND
+    MOV A,WRIT_ADD ;发送写入地址
+    LCALL SEND
+    LCALL ACKI
+    JC WRITEEND
+    
+    MOV R2,#2
+    MOV R1,#30H ;发送被写入数据的地址，写入原始数据
+OUT1:	MOV A,@R1
+    LCALL SEND
+    
+    LCALL ACKI
+    JC WRITEEND
+    INC R1
+    DJNZ R2,OUT1
+WRITEEND:LCALL STOP
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('eeprom-read-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">READ_IN (EEPROM)：数据读取</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="eeprom-read-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>该子程序从AT24C02 EEPROM芯片的指定地址中读取两个字节的历史温度数据。</p>
+                        <pre class="code-snippet"><code>
+READ_IN:    
+    LCALL START ;S
+    MOV A,#0A0H ;A0H为器件寻址字节+写操作！
+    LCALL SEND
+    LCALL ACKI
+    JC OUTEND   ;解析应答
+    MOV A,READ_ADD  ;发送将要读取的片内地址
+    LCALL SEND  
+    LCALL ACKI
+    JC OUTEND   ;解析应答
+    LCALL START ;S
+    ORL A,#0A1H ;发送读操作
+    LCALL SEND  
+    LCALL ACKI
+    JC OUTEND   ;解析应答
+    
+    MOV R2,#2   ;接收字符数
+    MOV R1,#30H ;接收地址
+IN0:	LCALL REV
+    LCALL ACKO   ;发送应答
+    MOV @R1,A   ;存入接收地址,R1现在就是个指针
+    INC R1		
+    DEC R2
+    CJNE R2,#1,IN0;因为要先发送非应答信号，才能读出数据
+    LCALL REV
+    LCALL ACKN  ;发送非应答位
+    MOV @R1,A
+OUTEND:	LCALL STOP
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('lcd-init-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">LCD_DESPLAY：LCD初始化与显示</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="lcd-init-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>该子程序负责对LCD1602液晶显示模块执行初始化操作，包括设置其显示模式、光标模式以及显示起始地址，并循环显示欢迎信息和温度上下限，为后续显示内容做准备。</p>
+                        <pre class="code-snippet"><code>
+LCD_DESPLAY:
+    MOV   A,#01H ;命令 1,清屏
+    ACALL W_LCD ;写入命令
+    MOV   A,#38H ;命令6,显示模式设置
+    ACALL W_LCD
+    MOV   A,#0CH ;命令4,设置开显示，不显示光标
+    ACALL W_LCD
+    
+    MOV   A,#14H ;命令5,光标移位指令
+    ACALL W_LCD
+    MOV   A,#84H ;命令8,设置地址,格式为 80H+地址码
+    ACALL W_LCD
+
+;显示部分
+LOOP1:
+    MOV   R1,#00H
+    MOV   DPTR,#TAB2
+LOP1:MOV   A,R1
+    MOVC  A,@A+DPTR
+    ACALL W_DATA
+    INC   R1
+    CJNE  R1,#7,LOP1 ;第一行7个字符是否发送完
+LOOP2:	  
+    MOV   A,#0C0H ;命令8,第二行从40H开始
+    ACALL W_LCD
+    ACALL DISPLAY_TEMP  ; 显示温度信息
+
+    CLR RS       ; 选择指令寄存器
+    CLR RW       ; 设置为写
+    CLR E        ; 禁止写入脉冲（防止P0变化影响LCD）
+    RET
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('tmr0-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">TMR0：数码管刷新</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="tmr0-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>作为定时器0的中断服务程序，其主要职责是周期性地刷新数码管显示，通过控制数码管的位选和段码输出，确保温度数值的稳定且清晰呈现。</p>
+                        <pre class="code-snippet"><code>
+TMR0:
+    MOV TH0,#swpH 		;重装
+    MOV TL0,#swpL 
+    
+    CJNE R3,#3,DSL 		;R3数码管计数器(0-3)
+    MOV P1,#0FFH 		; 先关闭所有数码管
+    MOV P0,48H  		; 输出十位段码
+    CLR P1.0  		; 选中数码管1（低电平有效）
+    DEC R3
+    RETI
+DSL:	CJNE R3,#2,DDL		; 输出个位段码
+    MOV P1,#0FFH
+    MOV P0,49H
+    NOP
+    NOP
+    NOP
+    CLR P1.1  		; 选中数码管2
+    DEC R3
+    RETI
+DDL:	CJNE R3,#1,DDD		; 输出小数位段码
+    MOV P1,#0FFH
+    MOV P0,4AH
+    NOP
+    NOP
+    NOP
+    CLR P1.2		; 选中数码管3
+    DEC R3
+    RETI
+DDD:	MOV P1,#0FFH		; 输出度c
+    MOV P0,#10100111b
+    CLR P1.3		; 选中数码管4	
+    MOV R3,#3
+    RETI
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('tmr1-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">TMR1：温度采集触发</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="tmr1-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>作为定时器1的中断服务程序，它以约1秒的周期触发一系列操作，包括调用(DSWD)采集温度、调用(TRANS12)进行温度转换、将转换后的温度值写入EEPROM (WRITE)，并最终调用(ALARM)子程序判断是否需要启动报警功能。</p>
+                        <pre class="code-snippet"><code>
+TMR1:
+    MOV TH0,#swpH		;重装
+    MOV TL0,#swpL 
+    DJNZ R7,EXIT_TMR1
+    LCALL DSWD		;调用获取温度子程序
+    LCALL TRANS12		;温度转换	
+    LCALL ALARM
+    MOV R7,#100
+EXIT_TMR1:RETI
+                        </code></pre>
+                    </div>
+                </div>
+                <div class="card cursor-pointer transform hover:scale-105 transition-transform duration-200" onclick="toggleDetail('chg-mod-detail')">
+                    <h3 class="text-xl font-semibold mb-2 accent-text">CHG_MOD：模式切换</h3>
+                    <p class="text-gray-400 text-sm">点击查看详情及代码</p>
+                    <div id="chg-mod-detail" class="module-detail mt-4 text-gray-300 text-sm">
+                        <p>作为外部中断的服务程序，其功能在于响应按键事件并实现系统工作模式的切换。通过对模式计数器R4进行递减操作，并在R4归零时重置为初始值，从而实现模式的循环切换。</p>
+                        <pre class="code-snippet"><code>
+CHG_MOD:
+    DJNZ R4,OUT_MOD
+    MOV  R4,#4
+        
+OUT_MOD:RETI
+                        </code></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="program-flow" class="mb-16 card">
+            <h2 class="text-3xl font-bold text-center mb-8 highlight-text">程序执行流程：系统动态解析</h2>
+            <p class="max-w-3xl mx-auto text-center text-gray-300 mb-8">
+                系统运行遵循清晰的流程，从初始化到持续的监测与响应。以下流程图展示了核心执行路径，点击方框可查看更多细节。
+            </p>
+            <div class="flex flex-col items-center">
+                <div class="flow-step w-60 cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-start-detail')">
+                    <h3 class="font-bold accent-text">系统启动与初始化</h3>
+                    <div id="flow-start-detail" class="module-detail text-sm mt-2 text-gray-300">
+                        系统上电后，执行全局中断禁用、定时器配置、中断使能、温度上下限初始化以及LCD初始化等操作。
+                    </div>
+                </div>
+                <div class="flow-arrow-down"></div>
+                <div class="flow-step w-60 cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-main-loop-detail')">
+                    <h3 class="font-bold accent-text">主循环 (LOOP)</h3>
+                    <div id="flow-main-loop-detail" class="module-detail text-sm mt-2 text-gray-300">
+                        主程序根据 R4 的值判断当前工作模式（正常显示、上限设置、下限设置、历史查看），并等待中断触发。
+                    </div>
+                </div>
+                <div class="flow-arrow-down"></div>
+                <div class="flow-decision w-32 h-32 flex items-center justify-center cursor-pointer transition-all duration-300"" onclick="toggleDetail('flow-interrupt-check-detail')">
+                    <span class="font-bold accent-text ">中断发生？</span>
+                    <div id="flow-interrupt-check-detail" class="text-sm text-gray-300 ">
+                        系统持续监听定时器中断 (TMR0, TMR1) 和外部中断 (CHG_MOD)。
+                    </div>
+                </div>
+                <div class="flow-connector w-80 mt-2">
+                    <div class="flow-path left"></div>
+                    <div class="flow-path right"></div>
+                </div>
+                <div class="flex justify-between w-80">
+                    <div class="text-sm text-gray-300 -mt-2 -ml-2">是</div>
+                    <div class="text-sm text-gray-300 -mt-2 -mr-2">否</div>
+                </div>
+                <div class="flex justify-between w-full max-w-lg">
+                    <div class="w-1/2 flex flex-col items-center pr-4">
+                        <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-tmr1-detail')">
+                            <h4 class="font-bold accent-text">定时器1中断 (TMR1)</h4>
+                            <div id="flow-tmr1-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                约1秒一次：采集温度 (DSWD) -> 转换 (TRANS12) -> 存储 (WRITE) -> 报警 (ALARM)。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-tmr0-detail')">
+                            <h4 class="font-bold accent-text">定时器0中断 (TMR0)</h4>
+                            <div id="flow-tmr0-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                高频触发：数码管动态扫描刷新。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-chgmod-detail')">
+                            <h4 class="font-bold accent-text">外部中断 (CHG_MOD)</h4>
+                            <div id="flow-chgmod-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                按键触发：循环切换系统工作模式。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-path-h w-full max-w-xs bg-accent-text"></div>
+                        <div class="flow-arrow-down rotate-90"></div>
+                        <div class="w-1/2"></div>
+                    </div>
+                    <div class="w-1/2 flex flex-col items-center pl-4">
+                         <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-idle-detail')">
+                            <h4 class="font-bold accent-text">主循环空闲/等待</h4>
+                            <div id="flow-idle-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                在无中断发生时，主循环根据当前模式执行相应逻辑或进入等待状态。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-mode-logic-detail')">
+                            <h4 class="font-bold accent-text">模式逻辑处理</h4>
+                            <div id="flow-mode-logic-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                根据R4值，主循环处理模式相关的逻辑（如P2.1/P2.2按键对上下限的调整或历史数据翻页）。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-step w-48 text-center cursor-pointer hover:bg-gray-700 transition-colors" onclick="toggleDetail('flow-return-main-detail')">
+                            <h4 class="font-bold accent-text">返回主循环</h4>
+                            <div id="flow-return-main-detail" class="module-detail text-sm mt-2 text-gray-300">
+                                中断服务程序执行完毕或模式逻辑处理完成后，控制权返回主循环的相应位置。
+                            </div>
+                        </div>
+                        <div class="flow-arrow-down"></div>
+                        <div class="flow-path-h w-full max-w-xs bg-accent-text"></div>
+                        <div class="flow-arrow-down rotate-90"></div>
+                        <div class="w-1/2"></div>
+                    </div>
+                </div>
+                <div class="flow-end mt-8 highlight-text">
+                    END
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer class="text-center p-6 text-sm text-gray-400 border-t border-gray-700">
+        <p>汇编语言与接口技术课程设计</p>
+        <p>该信息图使用 Chart.js 和 Tailwind CSS 构建。所有图表均使用Canvas 渲染。</p>
+        <p>NEITHER Mermaid JS NOR SVG were used in this output.</p>
+        <p>© 2025 c_wayen,chen_oro</p>
+    </footer>
+
+    <script>
+        function wrapLabel(label, maxLen = 16) {
+            if (typeof label !== 'string' || label.length <= maxLen) {
+                return label;
+            }
+            const words = label.split(' ');
+            let lines = [];
+            let currentLine = '';
+
+            words.forEach(word => {
+                if ((currentLine + word).length <= maxLen) {
+                    currentLine += (currentLine === '' ? '' : ' ') + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            });
+            if (currentLine !== '') {
+                lines.push(currentLine);
+            }
+            return lines.filter(line => line !== '');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const chartFontColor = '#F2F2F2'; 
+            const primaryColor = '#45A9BF'; 
+            const secondaryColor = '#F2B705'; 
+            const tertiaryColor = '#F28705'; 
+
+            const sharedTooltipCallback = {
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const item = tooltipItems[0];
+                                let label = item.chart.data.labels[item.dataIndex];
+                                if (Array.isArray(label)) {
+                                  return label.join(' ');
+                                } else {
+                                  return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            const moduleLabels = [
+                '初始化模块', '定时器中断服务程序', '外部中断服务程序', 
+                'DS18B20通信模块', '温度数据处理模块', '报警控制模块', 
+                'EEPROM（I2C）通信模块', 'LCD1602显示模块', '延时子程序'
+            ].map(label => wrapLabel(label));
+
+            new Chart(document.getElementById('moduleChart'), {
+                type: 'bar',
+                data: {
+                    labels: moduleLabels,
+                    datasets: [{
+                        label: '相对复杂程度',
+                        data: [10, 15, 8, 18, 12, 10, 16, 14, 5],
+                        backgroundColor: [
+                            primaryColor, primaryColor, primaryColor,
+                            secondaryColor, secondaryColor, secondaryColor,
+                            tertiaryColor, tertiaryColor, tertiaryColor
+                        ],
+                        borderColor: '#0D2E4E', 
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(242, 242, 242, 0.1)' 
+                            },
+                            ticks: {
+                                color: chartFontColor
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: chartFontColor
+                            }
+                        }
+                    },
+                    ...sharedTooltipCallback,
+                    plugins: {
+                        ...sharedTooltipCallback.plugins,
+                        legend: {
+                            labels: {
+                                color: chartFontColor
+                            }
+                        }
+                    }
+                }
+            });
+
+            window.toggleDetail = function(id) {
+                const element = document.getElementById(id);
+                if (element) {
+                    // Toggle active state for the detail element itself
+                    const isActive = element.classList.toggle('active');
+
+                    // Check if the element is the specific 'flow-interrupt-check-detail'
+                    if (id === 'flow-interrupt-check-detail') {
+                        const parentDecision = element.closest('.flow-decision');
+                        if (parentDecision) {
+                            // Toggle active state for the parent flow-decision element
+                            parentDecision.classList.toggle('active', isActive);
+                        }
+                    }
+                }
+            };
+        });
+    </script>
+</body>
+</html>
