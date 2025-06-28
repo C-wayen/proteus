@@ -437,7 +437,7 @@ OUTEND:	LCALL STOP
                     <div id="lcd-init-detail" class="module-detail mt-4 text-gray-300 text-sm">
                         <p>该子程序负责对LCD1602液晶显示模块执行初始化操作，包括设置其显示模式、光标模式以及显示起始地址，并循环显示欢迎信息和温度上下限，为后续显示内容做准备。</p>
                         <pre class="code-snippet"><code>
-LCD_DESPLAY:
+LCD_INIT:
     MOV   A,#01H ;命令 1,清屏
     ACALL W_LCD ;写入命令
     MOV   A,#38H ;命令6,显示模式设置
@@ -449,7 +449,8 @@ LCD_DESPLAY:
     ACALL W_LCD
     MOV   A,#84H ;命令8,设置地址,格式为 80H+地址码
     ACALL W_LCD
-
+                            
+LCD_DESPLAY:
 ;显示部分
 LOOP1:
     MOV   R1,#00H
